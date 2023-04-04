@@ -562,7 +562,7 @@ var BSync = new function()
     var hashTable = parseChecksumDocument(checksumDocument);
     var endOffset = data.byteLength - blockSize;
     var adlerInfo = null;
-    var lastMatchIndex = 0;
+    var lastPreMatchCount = 0;
     var currentPatch = new ArrayBuffer(1000);
     var currentPatchUint8 = new Uint8Array(currentPatch);
     var currentPatchSize = 0;
@@ -609,7 +609,10 @@ var BSync = new function()
           //create the patch and append it to the patches buffer
           patch = new ArrayBuffer(4 + 4); //4 for last match index, 4 for patch size
           var patchUint32 = new Uint32Array(patch,0,2);
-          patchUint32[0] = lastMatchIndex;
+          const preMatchCount = matchCount - 1;
+          const patchPreMatchCount = preMatchCount - lastPreMatchCount;
+          lastPreMatchCount = preMatchCount;
+          patchUint32[0] = patchPreMatchCount;
           patchUint32[1] = currentPatchSize;
           patch = appendBuffer(patch,currentPatch.slice(0,currentPatchSize));
           patches = appendBuffer(patches, patch);
@@ -644,7 +647,9 @@ var BSync = new function()
       //create the patch and append it to the patches buffer
       patch = new ArrayBuffer(4 + 4); //4 for last match index, 4 for patch size
       var patchUint32 = new Uint32Array(patch,0,2);
-      patchUint32[0] = lastMatchIndex;
+      const preMatchCount = matchCount;
+      const patchPreMatchCount = preMatchCount - lastPreMatchCount;
+      patchUint32[0] = patchPreMatchCount;
       patchUint32[1] = currentPatchSize;
       patch = appendBuffer(patch,currentPatch.slice(0,currentPatchSize));
       patches = appendBuffer(patches, patch);
@@ -703,7 +708,7 @@ var BSync = new function()
     //3) append the patch at that point
     //4) after all patches have been applied, continue to loop through the matchedBlocks appending each one in order
     var offset = 12 + (matchCount * 4); //offset to the start of the patches
-    var lastMatchingBlockIndex=0;
+    var patchPreMatchCount=0;
     var patchSize=0;
     var patchView8;
     var matchIndex=0; //the index into the matching blocks array
@@ -713,15 +718,15 @@ var BSync = new function()
     var chunkSize=0;
     for(i=0; i< patchCount; i++)
     {
-      lastMatchingBlockIndex = readInt32(patchDocumentView8,offset);
+      patchPreMatchCount = readInt32(patchDocumentView8,offset);
       patchSize = readInt32(patchDocumentView8,offset + 4);
       patchView8 = new Uint8Array(patchDocument, offset + 8, patchSize);
       offset = offset + 8 + patchSize;
 
-      for(;matchIndex < matchedBlockView32.length; matchIndex++)
+      for(let patchPreMatchIndex = 0;matchIndex < matchedBlockView32.length; matchIndex++,patchPreMatchIndex++)
       {
         blockIndex = matchedBlockView32[matchIndex];
-        if(blockIndex > lastMatchingBlockIndex) break;
+        if (patchPreMatchIndex >= patchPreMatchCount) break;
         if((blockIndex * blockSize) > data.byteLength)
           chunkSize = data.byteLength % blockSize;
         else chunkSize = blockSize;
